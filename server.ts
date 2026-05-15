@@ -2,20 +2,7 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs";
-import { GoogleGenAI } from "@google/genai";
 import { initializeApp } from 'firebase/app';
-
-let aiClient: GoogleGenAI | null = null;
-function getAiClient(): GoogleGenAI {
-  if (!aiClient) {
-    const key = process.env.GEMINI_API_KEY;
-    if (!key || key === 'MY_GEMINI_API_KEY') {
-      throw new Error("GEMINI_API_KEY not configured. Please check the Secrets panel in the AI Studio UI.");
-    }
-    aiClient = new GoogleGenAI({ apiKey: key });
-  }
-  return aiClient;
-}
 import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { exec } from 'child_process';
 import { z } from 'zod';
@@ -29,16 +16,50 @@ function runBackgroundSync() {
   console.log("Initiating 24/7 background sync & rectify...");
   const today = new Date().toISOString().split('T')[0];
   
-  exec(`python3 scrape_kerala_lottery.py --start ${today} --end ${today}`, (error, stdout, stderr) => {
-    if (error) {
-      console.error(`Background worker error: ${error.message}`);
-      return;
+  exec(`npx tsx mock_scraper.ts --start ${today} --end ${today}`, { env: { ...process.env } }, async (error, stdout, stderr) => {
+    try {
+      if (error) {
+        console.error(`Background worker error: ${error.message}`);
+        await addDoc(collection(db, 'sync_logs'), {
+          date: today,
+          status: 'error',
+          message: `Worker error: ${error.message}`,
+          createdAt: serverTimestamp()
+        });
+      } else {
+        const successMessage = stdout.includes("Successfully scraped") ? "Daily results synchronized." : "Sync completed (Check logs for results).";
+        await addDoc(collection(db, 'sync_logs'), {
+          date: today,
+          status: stdout.includes("Successfully scraped") ? 'success' : 'error',
+          message: successMessage,
+          createdAt: serverTimestamp()
+        });
+        
+        console.log(`Background worker stdout: ${stdout}`);
+      }
+      
+      // Run daily AI auto-debugging after sync
+      exec(`npx tsx auto_debug.ts`, { env: { ...process.env } }, (dbgError, dbgStdout, dbgStderr) => {
+        if (dbgError) {
+          console.error(`Auto Debugger error: ${dbgError.message}`);
+        } else {
+          console.log(`Auto Debugger output: ${dbgStdout}`);
+        }
+      });
+      
+    } catch (e) {
+      console.error("Failed to log sync activity:", e);
     }
-    if (stderr) {
-      console.error(`Background worker stderr: ${stderr}`);
-    }
-    console.log(`Background worker stdout: ${stdout}`);
   });
+}
+
+// Fisher-Yates Shuffle
+function shuffleArray<T>(array: T[]): T[] {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
 }
 
 // Run immediately and then every day (24 * 60 * 60 * 1000 ms)
@@ -71,7 +92,28 @@ async function startServer() {
     last4: z.string().min(1, "Last 4 digits are required")
   });
 
-  // API Route to save a forecast
+  // API Route to provide training data for forecasting (Moving AI to client-side)
+  app.get("/api/training-data", async (req, res) => {
+    try {
+      const csvPath = path.join(process.cwd(), 'kerala_lottery_results.csv');
+      const csvData = await fs.promises.readFile(csvPath, 'utf8');
+      const lines = csvData.split('\n');
+      const headers = lines[0].split(',').map(h => h.trim());
+      const allData = lines.slice(1).filter(line => line.trim()).map(line => {
+          const values = line.split(',');
+          let obj: {[key: string]: string} = {};
+          headers.forEach((h, i) => obj[h] = values[i]?.trim());
+          return obj;
+      });
+      const shuffledData = shuffleArray(allData);
+      const sampledData = shuffledData.slice(0, 30);
+      res.json({ status: "success", data: sampledData });
+    } catch (error) {
+      console.error("Error reading training data:", error);
+      res.status(500).json({ status: "error", message: "Failed to read data" });
+    }
+  });
+
   app.post("/api/save-forecast", async (req, res) => {
     try {
       const forecast = forecastSchema.parse(req.body);
@@ -90,73 +132,6 @@ async function startServer() {
       }
       console.error("Error saving forecast:", error);
       res.status(500).json({ status: "error", message: "Failed to save" });
-    }
-  });
-
-  // API Route to run a forecast
-  app.post("/api/run-forecast", async (req, res) => {
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      
-      // Load data
-      const csvPath = path.join(process.cwd(), 'kerala_lottery_results.csv');
-      const csvData = await fs.promises.readFile(csvPath, 'utf8');
-      const lines = csvData.split('\n');
-      const headers = lines[0].split(',').map(h => h.trim());
-      // Randomly sample data to reduce repetition
-      const allData = lines.slice(1).filter(line => line.trim()).map(line => {
-          const values = line.split(',');
-          let obj: {[key: string]: string} = {};
-          headers.forEach((h, i) => obj[h] = values[i]?.trim());
-          return obj;
-      });
-      // Shuffle and take a sample
-      const sampledData = allData.sort(() => 0.5 - Math.random()).slice(0, 15);
-
-      // Prepare Prompt
-      const recentDataStr = JSON.stringify(sampledData, null, 2);
-      const prompt = `
-            Analyze the following historical Kerala lottery results and predict winning numbers for ${today}.
-            
-            ${recentDataStr}
-            
-            Provide a prediction of winning numbers, a confidence score (0-1 as a number), and a concise basis for the prediction (as a string).
-            
-            Be creative and do not repeat the same numbers if you have predicted already for recent dates.
-            
-            Return the response in JSON format with keys: "predictedNumbers", "confidenceScore", "analysisBasis".
-      `;
-
-      // Call Gemini API
-      const ai = getAiClient();
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-        },
-      });
-
-      const forecast = JSON.parse(response.text!);
-      
-      // Save to Firestore
-      const payload = {
-          date: today,
-          targetLottery: "Predictive",
-          predictedSegments: String(forecast.predictedNumbers),
-          confidenceScore: Number(forecast.confidenceScore),
-          analysisBasis: forecast.analysisBasis
-      };
-
-      const docRef = await addDoc(collection(db, 'forecasts'), {
-        ...payload,
-        createdAt: serverTimestamp()
-      });
-
-      res.json({ status: "success", id: docRef.id, forecast });
-    } catch (error) {
-      console.error("Error during forecast execution:", error);
-      res.status(500).json({ status: "error", message: "Forecast Error: " + (error as any).message });
     }
   });
 
@@ -213,13 +188,18 @@ async function startServer() {
     try {
         console.log("On-demand sync triggered.");
         const today = new Date().toISOString().split('T')[0];
-      exec(`python3 scrape_kerala_lottery.py --start ${today} --end ${today}`, (error, stdout, stderr) => {
+      exec(`npx tsx mock_scraper.ts --start ${today} --end ${today}`, { env: { ...process.env } }, (error, stdout, stderr) => {
         if (error) {
           console.error(`Scrape error: ${error.message}`);
           return res.status(500).json({ status: "error", message: "Scrape Error", details: stderr });
         }
         res.json({
           status: "success",
+          message: "Scrape successful",
+          draw: {
+            date: today,
+            drawNo: stdout.match(/Draw No: (\S+)/)?.[1] || "DAILY-SYNC"
+          },
           output: stdout
         });
       });

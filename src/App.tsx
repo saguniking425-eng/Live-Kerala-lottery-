@@ -63,9 +63,15 @@ import { GoogleGenAI, Type } from "@google/genai";
 import ForecastingView from './components/ForecastingView';
 import AIInsightsVisualizer from './components/AIInsightsVisualizer';
 import TerminalDigitsVisualizer from './components/TerminalDigitsVisualizer';
+import RectifyPortal from './components/RectifyPortal';
 import ErrorBoundary from './components/ErrorBoundary';
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const getAiClient = () => {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key || key === 'MY_GEMINI_API_KEY') return null;
+  return new GoogleGenAI({ apiKey: key });
+};
+const ai = getAiClient();
 
 enum OperationType {
   CREATE = 'create',
@@ -658,7 +664,7 @@ async function saveLotteryResult(result: LotteryResult, setError: (msg: string |
                <div className="p-8">
                   <div className="space-y-6">
                     {specificResults.length > 0 ? specificResults.slice(0, 15).map((res, idx) => (
-                      <div key={idx} className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0 pb-4 border-b border-[#141414]/10 last:border-b-0">
+                      <div key={`bumper-res-${res.id || idx}-${idx}`} className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0 pb-4 border-b border-[#141414]/10 last:border-b-0">
                          <div className="flex flex-col">
                             <span className="font-mono text-[10px] opacity-40 uppercase">Date: {res.date}</span>
                             <span className="font-bold text-lg uppercase tracking-tight">Draw: {res.drawNo}</span>
@@ -700,7 +706,7 @@ async function saveLotteryResult(result: LotteryResult, setError: (msg: string |
                       <XAxis dataKey="digit" tick={{fontSize: 10}} />
                       <Bar dataKey="count" fill="#141414">
                         {analysis?.digitFreq.map((entry, index) => (
-                           <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#141414' : '#FECC00'} />
+                           <Cell key={`digit-freq-cell-${entry.digit}-${index}`} fill={index % 2 === 0 ? '#141414' : '#FECC00'} />
                         ))}
                       </Bar>
                       <Tooltip cursor={{fill: 'transparent'}} />
@@ -712,8 +718,8 @@ async function saveLotteryResult(result: LotteryResult, setError: (msg: string |
                    <div className="bg-white/50 p-4 border border-[#141414]">
                      <h5 className="font-bold text-xs uppercase mb-3 text-[#141414]">Consecutive Sequences</h5>
                      <div className="space-y-2">
-                       {analysis?.consecutiveFreq.sort((a,b) => b.count - a.count).slice(0, 3).map(c => (
-                         <div key={c.seq} className="flex justify-between items-center font-mono text-xs p-1 bg-white">
+                       {analysis?.consecutiveFreq.sort((a,b) => b.count - a.count).slice(0, 3).map((c, i) => (
+                         <div key={`cons-seq-${c.seq}-${i}`} className="flex justify-between items-center font-mono text-xs p-1 bg-white">
                            <span className="font-bold">{c.seq}</span>
                            <span className="opacity-70">{c.count} hit(s)</span>
                          </div>
@@ -723,8 +729,8 @@ async function saveLotteryResult(result: LotteryResult, setError: (msg: string |
                    <div className="bg-white/50 p-4 border border-[#141414]">
                      <h5 className="font-bold text-xs uppercase mb-3 text-[#141414]">Repeating Digits</h5>
                      <div className="space-y-2">
-                       {analysis?.repeatingFreq.sort((a,b) => b.count - a.count).slice(0, 3).map(r => (
-                         <div key={r.seq} className="flex justify-between items-center font-mono text-xs p-1 bg-white">
+                       {analysis?.repeatingFreq.sort((a,b) => b.count - a.count).slice(0, 3).map((r, i) => (
+                         <div key={`rep-digit-${r.seq}-${i}`} className="flex justify-between items-center font-mono text-xs p-1 bg-white">
                            <span className="font-bold">{r.seq}</span>
                            <span className="opacity-70">{r.count} hit(s)</span>
                          </div>
@@ -830,7 +836,7 @@ function DigitFrequencyHeatmap({ results }: { results: LotteryResult[] }) {
           const intensity = count / maxFreq;
           return (
             <div 
-              key={digit}
+              key={`heatmap-digit-${digit}`}
               className="relative aspect-square border-2 border-[#141414] flex flex-col items-center justify-center transition-all hover:scale-105 group overflow-hidden"
               style={{ backgroundColor: `rgba(20, 20, 20, ${0.05 + intensity * 0.95})` }}
             >
@@ -869,7 +875,7 @@ function DigitFrequencyHeatmap({ results }: { results: LotteryResult[] }) {
                <Bar dataKey="count" radius={[2, 2, 0, 0]}>
                   {digitFreq.map((entry, index) => (
                     <Cell 
-                      key={`cell-${index}`} 
+                      key={`heatmap-cell-${entry.digit}-${index}`} 
                       fill={entry.count === maxFreq ? '#dc2626' : '#141414'} 
                       className="transition-all hover:opacity-80"
                     />
@@ -959,6 +965,7 @@ export default function App() {
   const [isHistoricalLoading, setIsHistoricalLoading] = useState(true);
 
   const runAiAnalysis = async () => {
+    if (!ai) return;
     setIsAiProcessing(true);
     setAiInsights(null);
     try {
@@ -983,7 +990,7 @@ export default function App() {
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: prompt,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
             responseMimeType: "application/json",
         }
@@ -999,17 +1006,20 @@ export default function App() {
   };
 
   const generateInsight = async () => {
+    if (!ai) return;
     setIsAiProcessing(true);
     try {
       const prompt = `Analyze these Kerala Bumper Lottery results: ${JSON.stringify(historicalResults.slice(0, 10))}. 
         Identify winning patterns, cross-reference winning patterns across prize tiers, identify repeating number sequences, 
         and provide specific insights on potential machine biases and 'hot' digit clusters. 
         Provide a concise, analytical, and actionable expert insight for the next draw.`;
-      const result = await ai.models.generateContent({
-        model: "gemini-3.1-flash",
+      
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
         contents: [{ role: "user", parts: [{ text: prompt }] }],
       });
-      setAiInsight(result.text || "No insights generated.");
+      
+      setAiInsight(response.text || "No insights generated.");
     } catch (e) {
       setAiInsight("Failed to generate insights.");
     } finally {
@@ -1427,8 +1437,9 @@ export default function App() {
     setIsSavingForecast(true);
     try {
       const { collection, addDoc, serverTimestamp } = await import('firebase/firestore');
+      const { id, createdAt, ...forecastData } = forecast as any;
       await addDoc(collection(db, `users/${user.uid}/saved_forecasts`), {
-        ...forecast,
+        ...forecastData,
         userId: user.uid,
         savedAt: serverTimestamp()
       });
@@ -1460,13 +1471,17 @@ export default function App() {
 
   const handleManualRectify = async (pastedText: string) => {
     if (!pastedText.trim()) return;
+    if (!ai) {
+      setFsError("AI Engine unavailable. check GEMINI_API_KEY.");
+      return;
+    }
     setIsAiProcessing(true);
     setSyncStatus('syncing');
     
     try {
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: `Parse the following Kerala State Lottery result text into a structured JSON array of LotteryResult objects. 
+        contents: [{ role: 'user', parts: [{ text: `Parse the following Kerala State Lottery result text into a structured JSON array of LotteryResult objects. 
         
         CRITICAL: Extract ALL prizes from 1st Prize down to the 8th/9th Prize.
         1. For 1st/2nd prize, extract the full 6-digit number and series.
@@ -1477,7 +1492,7 @@ export default function App() {
         Lottery names should be official (e.g., "Karunya Plus").
         
         Text to parse:
-        ${pastedText}`,
+        ${pastedText}` }] }],
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -1544,7 +1559,7 @@ export default function App() {
         setSignals(prev => [
           {
             id: `sync-${Date.now()}`,
-            msg: `DATABASE SYNC: ${data.message}. Official Draw ID ${data.draw.drawNo} verified.`,
+            msg: `DATABASE SYNC: ${data.message || 'Complete'}. ${data.draw?.drawNo ? `Official Draw ID ${data.draw.drawNo} verified.` : 'System updated.'}`,
             type: 'system',
             time: new Date()
           },
@@ -1649,6 +1664,20 @@ export default function App() {
       <div className="min-h-screen bg-[#E4E3E0] text-[#141414] font-sans selection:bg-[#141414] selection:text-[#E4E3E0]">
         {/* Global Error Banner */}
       <AnimatePresence>
+        {!ai && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            className="fixed top-0 left-16 right-0 z-[60] bg-yellow-400 text-[#141414] overflow-hidden border-b-2 border-[#141414]"
+          >
+            <div className="px-8 py-2 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <AlertCircle size={14} className="animate-pulse" />
+                <span className="font-mono text-[9px] font-bold uppercase tracking-widest">AI engine offline :Gemini api key not configured ,prediction and patterns may be limited(to correct unlimited) . Please auto daily check secret panel.(daily auto check bugfix with AI)</span>
+              </div>
+            </div>
+          </motion.div>
+        )}
         {fsError && (
           <motion.div 
             initial={{ height: 0, opacity: 0 }}
@@ -1728,7 +1757,7 @@ export default function App() {
                     </h5>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                        {prizes.map((p, i) => (
-                          <div key={i} className={`p-4 border ${p.tier === selectedResult.tier ? 'bg-[#141414] text-white border-[#141414]' : 'border-[#141414]/10 bg-[#141414]/5'}`}>
+                          <div key={`ref-prize-${p.tier}-${i}`} className={`p-4 border ${p.tier === selectedResult.tier ? 'bg-[#141414] text-white border-[#141414]' : 'border-[#141414]/10 bg-[#141414]/5'}`}>
                              <p className="text-[9px] font-mono uppercase opacity-50 mb-1">{p.tier}</p>
                              <p className="font-bold text-sm">₹{p.amount}</p>
                           </div>
@@ -1808,6 +1837,7 @@ export default function App() {
           <NavItem icon={<Bell size={20} />} active={activeTab === 'signals'} onClick={() => setActiveTab('signals')} tooltip="Custom Alerts" />
           <NavItem icon={<BrainCircuit size={20} />} active={activeTab === 'forecast'} onClick={() => setActiveTab('forecast')} tooltip="AI Forecast" />
           <NavItem icon={<History size={20} />} active={activeTab === 'history'} onClick={() => setActiveTab('history')} tooltip="History" />
+          <NavItem icon={<RefreshCw size={20} />} active={activeTab === 'rectify'} onClick={() => setActiveTab('rectify')} tooltip="Sync Portal" />
           <NavItem icon={<Terminal size={20} />} active={activeTab === 'readme'} onClick={() => setActiveTab('readme')} tooltip="Logic" />
         </nav>
         <div className="flex flex-row sm:flex-col items-center gap-4 sm:gap-6 mt-0 sm:mt-auto pr-4 sm:pr-0 shrink-0">
@@ -2028,15 +2058,15 @@ export default function App() {
                     </AnimatePresence>
                     <div className="border border-[#141414] bg-white/50 backdrop-blur-sm">
                       {syncStatus === 'syncing' && liveResults.length === 0 ? (
-                        <div className="p-4 space-y-4">
+                        <div className="space-y-4">
                           {[...Array(5)].map((_, i) => (
-                            <div key={i} className="h-20 bg-[#141414]/5 animate-pulse border border-[#141414]/10" />
+                            <div key={`loader-main-${i}`} className="h-20 bg-[#141414]/5 animate-pulse border border-[#141414]/10" />
                           ))}
                         </div>
                       ) : liveResults.length > 0 ? (
                         liveResults.map((result, idx) => (
                           <div 
-                            key={idx} 
+                            key={`live-res-${result.id || idx}-${idx}`} 
                             onClick={() => setSelectedResult(result)}
                             className="flex flex-col sm:flex-row justify-between items-center p-4 border-b border-[#141414] last:border-b-0 hover:bg-[#141414] hover:text-[#E4E3E0] transition-all group cursor-pointer"
                           >
@@ -2089,19 +2119,19 @@ export default function App() {
                         <div>
                             <h4 className="font-bold text-xs uppercase mb-2">Patterns</h4>
                             <ul className="list-disc list-inside font-mono text-[10px] space-y-1">
-                                {aiInsights.patterns.map((p: any, i) => <li key={i}>{p.value} ({p.count})</li>)}
+                                {aiInsights.patterns.map((p: any, i: number) => <li key={`pattern-${p.value}-${i}`}>{p.value} ({p.count})</li>)}
                             </ul>
                         </div>
                         <div>
                             <h4 className="font-bold text-xs uppercase mb-2">Sequences</h4>
                             <ul className="list-disc list-inside font-mono text-[10px] space-y-1">
-                                {aiInsights.sequences.map((s: any, i) => <li key={i}>{s.value} ({s.count})</li>)}
+                                {aiInsights.sequences.map((s: any, i: number) => <li key={`sequence-${s.value}-${i}`}>{s.value} ({s.count})</li>)}
                             </ul>
                         </div>
                         <div>
                             <h4 className="font-bold text-xs uppercase mb-2">Biases</h4>
                             <ul className="list-disc list-inside font-mono text-[10px] space-y-1">
-                                {aiInsights.biases.map((b: any, i) => <li key={i}>{b.value} ({b.count})</li>)}
+                                {aiInsights.biases.map((b: any, i: number) => <li key={`bias-${b.value}-${i}`}>{b.value} ({b.count})</li>)}
                             </ul>
                         </div>
                       </div>
@@ -2319,7 +2349,7 @@ export default function App() {
                                      <Bar dataKey="accuracy" fill="#141414">
                                         {accuracyData.filter(d => d.type === 'weekly').map((entry, index) => (
                                           <Cell 
-                                            key={`cell-${index}`} 
+                                            key={`weekly-cell-${index}`} 
                                             fill={entry.accuracy > 50 ? '#dc2626' : '#141414'} 
                                             className="transition-all duration-300 hover:opacity-80"
                                           />
@@ -2367,7 +2397,7 @@ export default function App() {
                                <Bar dataKey="accuracy" fill="#141414" opacity={0.15} radius={[4, 4, 0, 0]}>
                                   {accuracyData.filter(d => d.type === 'daily').map((entry, index) => (
                                     <Cell 
-                                      key={`cell-${index}`} 
+                                      key={`daily-cell-${index}`} 
                                       fill={entry.accuracy > 70 ? '#22c55e' : entry.accuracy > 40 ? '#141414' : '#ef4444'} 
                                     />
                                   ))}
@@ -2523,7 +2553,7 @@ export default function App() {
                     const isToday = new Date().toLocaleDateString('en-US', { weekday: 'long' }) === s.day;
                     return (
                       <div 
-                        key={i} 
+                        key={`cad-schedule-${s.day}-${i}`} 
                         className={`border-4 p-8 transition-all flex flex-col justify-between h-64 relative group ${isToday ? 'border-[#141414] bg-white shadow-[12px_12px_0_#141414]' : 'border-[#141414]/10 hover:border-[#141414]/40 bg-white/50'}`}
                       >
                         {isToday && (
@@ -2593,6 +2623,18 @@ export default function App() {
               </motion.div>
             )}
 
+            {activeTab === 'rectify' && (
+              <motion.div 
+                key="rectify"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="w-full"
+              >
+                <RectifyPortal />
+              </motion.div>
+            )}
+
             {activeTab === 'history' && (
               <motion.div 
                 key="history"
@@ -2630,7 +2672,7 @@ export default function App() {
                         {isHistoricalLoading ? (
                           <div className="space-y-4 p-4">
                             {[...Array(5)].map((_, i) => (
-                              <div key={i} className="h-20 bg-[#141414]/5 animate-pulse border border-[#141414]/10" />
+                              <div key={`skeleton-hist-${i}`} className="h-20 bg-[#141414]/5 animate-pulse border border-[#141414]/10" />
                             ))}
                           </div>
                         ) : (
@@ -2666,7 +2708,7 @@ export default function App() {
                         </h4>
                         <div className="space-y-2">
                           {schedule.map((s, i) => (
-                            <div key={i} className="flex justify-between items-center py-2 border-b border-[#141414]/10 last:border-b-0 text-sm">
+                            <div key={`digest-schedule-${s.day}-${i}`} className="flex justify-between items-center py-2 border-b border-[#141414]/10 last:border-b-0 text-sm">
                               <span className="font-mono text-[10px] opacity-40 uppercase">{s.day}</span>
                               <span className="font-bold uppercase tracking-tight">{s.name}</span>
                             </div>
@@ -2680,7 +2722,7 @@ export default function App() {
                         </h4>
                         <div className="space-y-3">
                           {prizes.map((p, i) => (
-                            <div key={i} className="flex justify-between items-end border-b border-[#141414]/5 pb-2">
+                            <div key={`struct-prize-${p.tier}-${i}`} className="flex justify-between items-end border-b border-[#141414]/5 pb-2">
                               <div>
                                 <p className="text-[10px] font-mono uppercase opacity-40 leading-none">Tier</p>
                                 <p className="font-bold">{p.tier}</p>

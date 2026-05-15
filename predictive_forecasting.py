@@ -47,13 +47,13 @@ class ForecastingModule:
     def __init__(self, data_file="kerala_lottery_results.csv"):
         self.data_file = data_file
         api_key = os.environ.get("GEMINI_API_KEY")
-        if api_key:
+        if api_key and api_key != "MY_GEMINI_API_KEY":
             logging.info("Initializing GenAI with API key.")
             genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-2.0-flash')
+            self.model = genai.GenerativeModel('gemini-3-flash-preview')
         else:
-            logging.error("GEMINI_API_KEY not found.")
-            raise Exception("GEMINI_API_KEY not found.")
+            logging.error("GEMINI_API_KEY not found or invalid.")
+            raise Exception("GEMINI_API_KEY not found or invalid.")
 
     def run_forecast(self, target_date):
         logging.info(f"Running forecast for {target_date}")

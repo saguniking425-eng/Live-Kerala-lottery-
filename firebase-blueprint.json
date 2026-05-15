@@ -53,6 +53,18 @@
         "isActive": { "type": "boolean" }
       },
       "required": ["userId", "type", "value"]
+    },
+    "SyncLog": {
+      "title": "Sync Operation Log",
+      "description": "Recorded trace of an automated or manual synchronization attempt.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "status": { "type": "string", "enum": ["success", "error"] },
+        "message": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["date", "status", "message"]
     }
   },
   "firestore": {
@@ -75,6 +87,10 @@
     "users/{userId}/saved_forecasts/{forecastId}": {
       "schema": "Forecast",
       "description": "Forecasts saved by the user."
+    },
+    "sync_logs/{logId}": {
+      "schema": "SyncLog",
+      "description": "Audit trail for system sync operations."
     }
   }
 }

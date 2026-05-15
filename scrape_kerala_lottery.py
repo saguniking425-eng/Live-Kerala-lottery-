@@ -42,6 +42,8 @@ import time
 import csv
 import argparse
 import random
+import threading
+import concurrent.futures
 import requests
 import pdfplumber
 import pandas as pd
@@ -121,17 +123,18 @@ class KeralaLotteryScraper:
         self.error_file = error_file
         self.report_file = "ai_daily_reports.csv"
         self.delay = delay
+        self.lock = threading.Lock()
         self.session = get_robust_session()
         self.proxy_pool = fetch_free_proxies()
         
         # Initialize Gemini
         api_key = os.environ.get("GEMINI_API_KEY")
-        if api_key:
+        if api_key and api_key != "MY_GEMINI_API_KEY":
             genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-2.0-flash')
+            self.model = genai.GenerativeModel('gemini-3-flash-preview') # Update to gemini-3-flash-preview as per context
         else:
             self.model = None
-            logging.warning("GEMINI_API_KEY not found. AI reports will be disabled.")
+            logging.warning("GEMINI_API_KEY not found or invalid. AI reports will be disabled.")
 
         self.schedule = {
             0: ("Monday", "Win-Win"),
@@ -663,7 +666,72 @@ class KeralaLotteryScraper:
             self.log_error(date, f"Feed fetch error: {str(e)}", url=url)
             return []
 
-    def run(self):
+    def process_date(self, current_date):
+        logging.info(f"Processing {current_date.strftime('%Y-%m-%d')}...")
+        
+        draw_results = []
+        
+        # Try keralalotteries.net feed first for real-time results as it's often faster
+        logging.info(f"Checking keralalotteries.net feed for {current_date.strftime('%Y-%m-%d')}...")
+        draw_results = self.get_keralalotteries_net_results(current_date)
+        
+        if not draw_results:
+            logging.info(f"Feed unavailable. Attempting PDF lookup for {current_date.strftime('%Y-%m-%d')}...")
+            pdf_url = self.get_pdf_pdf_url(current_date)
+            if pdf_url:
+                pdf_path = self.download_pdf(pdf_url, current_date)
+                if pdf_path:
+                    draw_results = self.parse_pdf(pdf_path, current_date, url=pdf_url)
+                    if os.path.exists(pdf_path):
+                        os.remove(pdf_path)
+
+        if draw_results:
+            # Save winning numbers
+            for result in draw_results:
+                # result is: [date, day, lottery, drawNo, tier, prize, series, num, last4]
+                payload = {
+                    "date": result[0],
+                    "lotteryName": result[2],
+                    "drawNo": result[3],
+                    "tier": result[4],
+                    "amount": float(result[5]),
+                    "series": result[6],
+                    "number": result[7],
+                    "last4": result[8]
+                }
+                self.post_with_retry("http://localhost:3000/api/save-lottery-result", payload)
+                    
+            # Optionally keep local CSV if needed
+            with self.lock:
+                with open(self.output_file, "a", newline="") as f:
+                    writer = csv.writer(f)
+                    writer.writerows(draw_results)
+            
+            # Generate and save AI Daily Report
+            ai_report = self.generate_ai_report(current_date, draw_results)
+            if ai_report and not str(ai_report).startswith("AI error:"):
+                day_name, lottery_name = self.schedule[current_date.weekday()]
+                with self.lock:
+                    with open(self.report_file, "a", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow([current_date.strftime("%Y-%m-%d"), lottery_name, ai_report])
+                
+                report_payload = {
+                    "date": current_date.strftime("%Y-%m-%d"),
+                    "lotteryName": lottery_name,
+                    "report": ai_report
+                }
+                self.post_with_retry("http://localhost:3000/api/save-report", report_payload)
+                logging.info(f"AI Analytics report generated and saved for {current_date.strftime('%Y-%m-%d')}.")
+
+            logging.info(f"Successfully scraped {len(draw_results)} results for {current_date.strftime('%Y-%m-%d')}.")
+        else:
+            day_name, lottery_name = self.schedule[current_date.weekday()]
+            with self.lock:
+                self.log_error(current_date, f"Results not found for {lottery_name} (tried both PDF and Portal Feed)")
+        return True
+
+    def run(self, max_workers=5):
         # Check if file exists to decide on writing headers
         file_exists = os.path.exists(self.output_file)
         
@@ -687,69 +755,22 @@ class KeralaLotteryScraper:
             if not file_exists_error:
                 writer.writerow(["Date", "Reason", "URL", "Status_Code", "Additional_Info"])
 
+        # Create list of dates to process
+        dates_to_process = []
         current_date = self.start_date
         while current_date <= self.end_date:
-            logging.info(f"Processing {current_date.strftime('%Y-%m-%d')}...")
-            
-            draw_results = []
-            pdf_url = self.get_pdf_pdf_url(current_date)
-            if pdf_url:
-                pdf_path = self.download_pdf(pdf_url, current_date)
-                if pdf_path:
-                    draw_results = self.parse_pdf(pdf_path, current_date, url=pdf_url)
-                    if os.path.exists(pdf_path):
-                        os.remove(pdf_path)
-            
-            # Fallback to keralalotteries.net feed if PDF parsing failed or no PDF found
-            if not draw_results:
-                logging.info(f"Falling back to keralalotteries.net feed for {current_date.strftime('%Y-%m-%d')}...")
-                draw_results = self.get_keralalotteries_net_results(current_date)
-
-            if draw_results:
-                # Save winning numbers
-                for result in draw_results:
-                    # result is: [date, day, lottery, drawNo, tier, prize, series, num, last4]
-                    payload = {
-                        "date": result[0],
-                        "lotteryName": result[2],
-                        "drawNo": result[3],
-                        "tier": result[4],
-                        "amount": float(result[5]),
-                        "series": result[6],
-                        "number": result[7],
-                        "last4": result[8]
-                    }
-                    self.post_with_retry("http://localhost:3000/api/save-lottery-result", payload)
-                        
-                # Optionally keep local CSV if needed
-                with open(self.output_file, "a", newline="") as f:
-                    writer = csv.writer(f)
-                    writer.writerows(draw_results)
-                
-                # Generate and save AI Daily Report
-                ai_report = self.generate_ai_report(current_date, draw_results)
-                if ai_report and not str(ai_report).startswith("AI error:"):
-                    day_name, lottery_name = self.schedule[current_date.weekday()]
-                    with open(self.report_file, "a", newline="") as f:
-                        writer = csv.writer(f)
-                        writer.writerow([current_date.strftime("%Y-%m-%d"), lottery_name, ai_report])
-                    
-                    report_payload = {
-                        "date": current_date.strftime("%Y-%m-%d"),
-                        "lotteryName": lottery_name,
-                        "report": ai_report
-                    }
-                    self.post_with_retry("http://localhost:3000/api/save-report", report_payload)
-                    logging.info("AI Analytics report generated and saved.")
-
-                logging.info(f"Successfully scraped {len(draw_results)} results.")
-            else:
-                day_name, lottery_name = self.schedule[current_date.weekday()]
-                self.log_error(current_date, f"Results not found for {lottery_name} (tried both PDF and Portal Feed)")
-
-            # Rate limiting
-            time.sleep(self.delay)
+            dates_to_process.append(current_date)
             current_date += timedelta(days=1)
+
+        logging.info(f"Starting parallel processing with {max_workers} workers for {len(dates_to_process)} dates.")
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Map the processing function to each date
+            # Note: We don't use delay here in the same way because 
+            # parallel requests already act as a form of "anti-delay"
+            # If the user still wants a delay between STARTING threads, that's complex
+            # But usually parallel processing is intended to bypass sequential delays.
+            executor.map(self.process_date, dates_to_process)
 
         # Generate Visualization Chart
         self.generate_prize_chart()
@@ -842,7 +863,13 @@ if __name__ == "__main__":
         "--delay", 
         type=float, 
         default=2.0, 
-        help="Rate-limiting delay in seconds between network requests"
+        help="Rate-limiting delay in seconds (only applied in non-parallel mode)"
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=5,
+        help="Number of parallel workers for scraping"
     )
     
     args = parser.parse_args()
@@ -861,6 +888,7 @@ if __name__ == "__main__":
     logging.info("--- Kerala Lottery Intelligence Engine Initialized ---")
     logging.info(f"Range: {args.start} to {args.end}")
     logging.info(f"Target: {args.output}")
+    logging.info(f"Parallelism: {args.workers} workers")
     
     scraper = KeralaLotteryScraper(args.start, args.end, args.output, delay=args.delay)
-    scraper.run()
+    scraper.run(max_workers=args.workers)

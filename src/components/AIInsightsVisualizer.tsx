@@ -40,7 +40,7 @@ export default function AIInsightsVisualizer({ aiInsights, isAiProcessing, runAi
                         <Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{ borderRadius: 0, border: '1px solid #141414' }} />
                         <Bar dataKey="count" fill="#141414" barSize={20} radius={[0, 4, 4, 0]}>
                            {aiInsights.patterns && aiInsights.patterns.map((entry: any, index: number) => (
-                              <Cell key={`cell-${index}`} fill={index === 0 ? '#ef4444' : '#141414'} />
+                              <Cell key={`cell-pattern-${index}`} fill={index === 0 ? '#ef4444' : '#141414'} />
                            ))}
                         </Bar>
                       </BarChart>
@@ -59,7 +59,7 @@ export default function AIInsightsVisualizer({ aiInsights, isAiProcessing, runAi
                         <Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{ borderRadius: 0, border: '1px solid #141414' }} />
                         <Bar dataKey="count" fill="#141414" barSize={20} radius={[0, 4, 4, 0]}>
                            {aiInsights.sequences && aiInsights.sequences.map((entry: any, index: number) => (
-                              <Cell key={`cell-${index}`} fill={index === 0 ? '#3b82f6' : '#141414'} />
+                              <Cell key={`cell-seq-${index}`} fill={index === 0 ? '#3b82f6' : '#141414'} />
                            ))}
                         </Bar>
                       </BarChart>
@@ -78,7 +78,7 @@ export default function AIInsightsVisualizer({ aiInsights, isAiProcessing, runAi
                         <Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{ borderRadius: 0, border: '1px solid #141414' }} />
                         <Bar dataKey="count" fill="#141414" barSize={20} radius={[0, 4, 4, 0]}>
                            {aiInsights.biases && aiInsights.biases.map((entry: any, index: number) => (
-                              <Cell key={`cell-${index}`} fill={index === 0 ? '#eab308' : '#141414'} />
+                              <Cell key={`cell-bias-${index}`} fill={index === 0 ? '#eab308' : '#141414'} />
                            ))}
                         </Bar>
                       </BarChart>

@@ -21,14 +21,15 @@ service cloud.firestore {
 
     // --- Validation Blueprints ---
     function isValidLotteryResult(data) {
-      return data.keys().hasAll(['date', 'lotteryName', 'drawNo', 'tier', 'series', 'number', 'last4', 'amount'])
+      return data.keys().hasAll(['date', 'lotteryName', 'drawNo', 'tier', 'series', 'number', 'last4', 'amount', 'createdAt'])
         && data.date is string && data.date.size() == 10
         && data.lotteryName is string && data.lotteryName.size() <= 100
-        && data.number is string && data.number.size() <= 10;
+        && data.number is string && data.number.size() <= 10
+        && data.createdAt == request.time;
     }
 
     function isValidForecast(data) {
-      return data.keys().hasAll(['date', 'targetLottery', 'predictedSegments', 'confidenceScore', 'analysisBasis'])
+      return data.keys().hasAll(['date', 'predictedSegments', 'confidenceScore'])
         && data.date is string && data.date.size() == 10
         && data.confidenceScore is number
         && data.predictedSegments is string;
@@ -45,10 +46,19 @@ service cloud.firestore {
     }
 
     function isValidReport(data) {
-      return data.keys().hasAll(['date', 'lotteryName', 'report'])
+      return data.keys().hasAll(['date', 'lotteryName', 'report', 'createdAt'])
         && data.date is string && data.date.size() == 10
         && data.lotteryName is string && data.lotteryName.size() <= 100
-        && data.report is string;
+        && data.report is string
+        && data.createdAt == request.time;
+    }
+
+    function isValidSyncLog(data) {
+      return data.keys().hasAll(['date', 'status', 'message', 'createdAt'])
+        && data.date is string
+        && data.status in ['success', 'error']
+        && data.message is string
+        && data.createdAt == request.time;
     }
 
     // --- Collection Rules ---
@@ -92,6 +102,13 @@ service cloud.firestore {
     match /users/{userId}/saved_forecasts/{forecastId} {
       allow read, delete: if isSignedIn() && request.auth.uid == userId;
       allow create: if isSignedIn() && request.auth.uid == userId && isValidForecast(incoming());
+    }
+
+    // Sync Logs: Audit trail for sync operations.
+    match /sync_logs/{logId} {
+      allow read: if true;
+      allow create: if isValidSyncLog(incoming());
+      allow update, delete: if false;
     }
     
     // Connection test document

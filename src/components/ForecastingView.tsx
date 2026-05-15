@@ -1,8 +1,16 @@
 
 import React, { useState, useEffect } from 'react';
 import { Sparkles, BrainCircuit, Save, Loader2, AlertCircle, Check } from 'lucide-react';
-import { collection, query, orderBy, limit, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, limit, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { GoogleGenAI } from "@google/genai";
+
+const getAiClient = () => {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key || key === 'MY_GEMINI_API_KEY') return null;
+  return new GoogleGenAI({ apiKey: key });
+};
+const ai = getAiClient();
 
 interface Forecast {
   id?: string;
@@ -32,21 +40,58 @@ export default function ForecastingView({ user }: { user: any }) {
   }, []);
 
   const runForecast = async () => {
+    if (!ai) {
+      alert("AI Engine unavailable. check GEMINI_API_KEY.");
+      return;
+    }
     setLoading(true);
     try {
-      const response = await fetch('/api/run-forecast', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: targetDate }),
-      });
-      const data = await response.json();
-      if (data.status !== 'success') throw new Error(data.message);
+      // 1. Get training data from server
+      const trainingRes = await fetch('/api/training-data');
+      const trainingData = await trainingRes.json();
       
-      // Fetch latest forecast after running
-      const latestSnapshot = await fetch('/api/get-latest-forecast'); // Need to add this
-      // Wait, let's just use the snapshot observer
+      if (trainingData.status !== 'success') throw new Error("Failed to load historical context");
+
+      // 2. Prepare Prompt
+      const recentDataStr = JSON.stringify(trainingData.data, null, 2);
+      const prompt = `
+            SYSTEM DATA: ${recentDataStr}
+            TARGET DATE: ${targetDate}
+            CONSTRAINTS: 
+            1. DO NOT REPEAT NUMBERS FROM THE SEARCH RESULTS OR RECENT PREDICTIONS.
+            2. ANALYZE TERMINAL DIGIT DRIFT (LAST 4 DIGITS) TO IDENTIFY UNDERSERVED OR "HOT" PATTERNS.
+            3. BE CREATIVE AND VARY THE DIGIT COMBINATIONS.
+            4. RETURN ONLY JSON.
+
+            Analyze these Kerala lottery results and synthesize unique winning number predictions for ${targetDate}.
+            
+            Return the response in JSON format with keys: "predictedNumbers", "confidenceScore" (0-1), "analysisBasis".
+      `;
+
+      // 3. Call Gemini API on client
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          responseMimeType: "application/json",
+        },
+      });
+
+      const forecast = JSON.parse(response.text || '{}');
+      
+      // 4. Save to Firestore (Global context)
+      await addDoc(collection(db, 'forecasts'), {
+          date: targetDate,
+          targetLottery: "Predictive",
+          predictedSegments: String(forecast.predictedNumbers),
+          confidenceScore: Number(forecast.confidenceScore),
+          analysisBasis: forecast.analysisBasis,
+          createdAt: serverTimestamp()
+      });
+      
     } catch (err) {
       console.error(err);
+      alert("Forecast failure: " + (err as Error).message);
     } finally {
       setLoading(false);
     }
