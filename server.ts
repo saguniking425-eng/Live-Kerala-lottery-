@@ -3,13 +3,15 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import fs from "fs";
 import { initializeApp } from 'firebase/app';
-import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { initializeFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { exec } from 'child_process';
 import { z } from 'zod';
 import firebaseConfigJSON from './firebase-applet-config.json' with { type: 'json' };
 
 const firebaseApp = initializeApp(firebaseConfigJSON);
-const db = getFirestore(firebaseApp, firebaseConfigJSON.firestoreDatabaseId);
+const db = initializeFirestore(firebaseApp, {
+  experimentalForceLongPolling: true
+}, firebaseConfigJSON.firestoreDatabaseId);
 
 // 24/7 Background Worker for Auto Save & Sync Logic
 function runBackgroundSync() {

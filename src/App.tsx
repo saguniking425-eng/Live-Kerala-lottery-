@@ -1673,7 +1673,7 @@ export default function App() {
             <div className="px-8 py-2 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <AlertCircle size={14} className="animate-pulse" />
-                <span className="font-mono text-[9px] font-bold uppercase tracking-widest">AI engine offline :Gemini api key not configured ,prediction and patterns may be limited(to correct unlimited) . Please auto daily check secret panel.(daily auto check bugfix with AI)</span>
+                <span className="font-mono text-[9px] font-bold uppercase tracking-widest">AI Engine Offline: AI insights temporarily disabled.</span>
               </div>
             </div>
           </motion.div>
