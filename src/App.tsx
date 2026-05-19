@@ -66,7 +66,10 @@ import TerminalDigitsVisualizer from './components/TerminalDigitsVisualizer';
 import RectifyPortal from './components/RectifyPortal';
 import ErrorBoundary from './components/ErrorBoundary';
 
+const DEBUG_AI_OFFLINE = true;
+
 const getAiClient = () => {
+  if (DEBUG_AI_OFFLINE) return null;
   const key = process.env.GEMINI_API_KEY;
   if (!key || key === 'MY_GEMINI_API_KEY') return null;
   return new GoogleGenAI({ apiKey: key });
@@ -1673,7 +1676,7 @@ export default function App() {
             <div className="px-8 py-2 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <AlertCircle size={14} className="animate-pulse" />
-                <span className="font-mono text-[9px] font-bold uppercase tracking-widest">AI Engine Offline: AI insights temporarily disabled.</span>
+                <span className="font-mono text-[9px] font-bold uppercase tracking-widest">AI engine offline :Ai insights temporary disabled bugfix debugging start</span>
               </div>
             </div>
           </motion.div>
