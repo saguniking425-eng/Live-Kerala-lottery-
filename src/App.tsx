@@ -373,7 +373,7 @@ function SignalsView({
              </h3>
              <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
                 {alerts.map((alert, i) => (
-                  <div key={`${alert.id}-${i}`} className={`flex items-center justify-between p-4 bg-white border ${alert.isActive ? 'border-[#141414]' : 'border-[#141414]/20 bg-gray-50 opacity-60'} group shrink-0 transition-opacity`}>
+                  <div key={alert.id || `alert-${i}`} className={`flex items-center justify-between p-4 bg-white border ${alert.isActive ? 'border-[#141414]' : 'border-[#141414]/20 bg-gray-50 opacity-60'} group shrink-0 transition-opacity`}>
                     <div className="flex items-center gap-4">
                        <button 
                          type="button"
@@ -432,7 +432,7 @@ function SignalsView({
           <div className="space-y-4">
              {signals.length > 0 ? signals.map((signal, i) => (
                <motion.div 
-                 key={`${signal.id}-${i}`}
+                 key={signal.id || `signal-${i}`}
                  initial={{ x: -20, opacity: 0 }}
                  animate={{ x: 0, opacity: 1 }}
                  className="grid grid-cols-1 md:grid-cols-4 items-center gap-6 p-6 border-b border-[#141414]/10 hover:bg-[#141414]/5 transition-colors"
@@ -664,7 +664,7 @@ async function saveLotteryResult(result: LotteryResult, setError: (msg: string |
                <div className="p-8">
                   <div className="space-y-6">
                     {specificResults.length > 0 ? specificResults.slice(0, 15).map((res, idx) => (
-                      <div key={`bumper-res-${res.id || idx}-${idx}`} className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0 pb-4 border-b border-[#141414]/10 last:border-b-0">
+                      <div key={res.id || `bumper-res-${idx}`} className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0 pb-4 border-b border-[#141414]/10 last:border-b-0">
                          <div className="flex flex-col">
                             <span className="font-mono text-[10px] opacity-40 uppercase">Date: {res.date}</span>
                             <span className="font-bold text-lg uppercase tracking-tight">Draw: {res.drawNo}</span>
@@ -1794,7 +1794,7 @@ export default function App() {
         <AnimatePresence>
           {signals.slice(0, 3).map((sig, i) => (
             <motion.div
-              key={`${sig.id}-${i}`}
+              key={sig.id || `sig-${i}`}
               initial={{ x: 300, opacity: 0 }}
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: 300, opacity: 0 }}
@@ -2066,7 +2066,7 @@ export default function App() {
                       ) : liveResults.length > 0 ? (
                         liveResults.map((result, idx) => (
                           <div 
-                            key={`live-res-${result.id || idx}-${idx}`} 
+                            key={result.id || `live-res-${idx}`} 
                             onClick={() => setSelectedResult(result)}
                             className="flex flex-col sm:flex-row justify-between items-center p-4 border-b border-[#141414] last:border-b-0 hover:bg-[#141414] hover:text-[#E4E3E0] transition-all group cursor-pointer"
                           >
@@ -2236,7 +2236,7 @@ export default function App() {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                        {savedForecasts.map((f, i) => (
-                         <div key={`${f.id}-${i}`} className="border border-white/10 p-4 hover:bg-white hover:text-[#141414] transition-all group relative">
+                         <div key={f.id || `forecast-${i}`} className="border border-white/10 p-4 hover:bg-white hover:text-[#141414] transition-all group relative">
                             <button 
                               onClick={() => f.id && handleDeleteForecast(f.id)}
                               className="absolute -top-2 -right-2 opacity-0 group-hover:opacity-100 bg-red-600 text-white p-1 rounded-full shadow-lg hover:scale-110 active:scale-95 transition-all z-10"
@@ -2678,7 +2678,7 @@ export default function App() {
                         ) : (
                           historicalResults.slice(0, 20).map((res, i) => (
                             <motion.div 
-                              key={`${res.id}-${i}`} 
+                              key={res.id || `hist-${i}`} 
                               whileHover={{ x: 4 }}
                               onClick={() => setSelectedResult(res)}
                               className="grid grid-cols-4 items-center p-4 bg-white border border-[#141414] hover:bg-[#141414] hover:text-white transition-all group cursor-pointer shadow-[2px_2px_0_#141414]"
@@ -2722,7 +2722,7 @@ export default function App() {
                         </h4>
                         <div className="space-y-3">
                           {prizes.map((p, i) => (
-                            <div key={`struct-prize-${p.tier}-${i}`} className="flex justify-between items-end border-b border-[#141414]/5 pb-2">
+                            <div key={`struct-prize-${p.tier}`} className="flex justify-between items-end border-b border-[#141414]/5 pb-2">
                               <div>
                                 <p className="text-[10px] font-mono uppercase opacity-40 leading-none">Tier</p>
                                 <p className="font-bold">{p.tier}</p>

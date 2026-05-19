@@ -1,9 +1,11 @@
-import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { initializeApp } from 'firebase/app';
 import firebaseConfigJSON from './firebase-applet-config.json' with { type: 'json' };
 
 const firebaseApp = initializeApp(firebaseConfigJSON);
-const db = getFirestore(firebaseApp, firebaseConfigJSON.firestoreDatabaseId);
+const db = initializeFirestore(firebaseApp, {
+  experimentalForceLongPolling: true
+}, firebaseConfigJSON.firestoreDatabaseId);
 
 async function runMockScraper() {
   const args = process.argv.slice(2);

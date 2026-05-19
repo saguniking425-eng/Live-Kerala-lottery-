@@ -1,0 +1,35 @@
+324:                      key={t}
+376:                  <div key={`${alert.id}-${i}`} className={`flex items-center justify-between p-4 bg-white border ${alert.isActive ? 'border-[#141414]' : 'border-[#141414]/20 bg-gray-50 opacity-60'} group shrink-0 transition-opacity`}>
+435:                 key={`${signal.id}-${i}`}
+586:                  key={b.id}
+667:                      <div key={`bumper-res-${res.id || idx}-${idx}`} className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0 pb-4 border-b border-[#141414]/10 last:border-b-0">
+709:                           <Cell key={`digit-freq-cell-${entry.digit}-${index}`} fill={index % 2 === 0 ? '#141414' : '#FECC00'} />
+722:                         <div key={`cons-seq-${c.seq}-${i}`} className="flex justify-between items-center font-mono text-xs p-1 bg-white">
+733:                         <div key={`rep-digit-${r.seq}-${i}`} className="flex justify-between items-center font-mono text-xs p-1 bg-white">
+839:              key={`heatmap-digit-${digit}`}
+878:                      key={`heatmap-cell-${entry.digit}-${index}`} 
+1760:                          <div key={`ref-prize-${p.tier}-${i}`} className={`p-4 border ${p.tier === selectedResult.tier ? 'bg-[#141414] text-white border-[#141414]' : 'border-[#141414]/10 bg-[#141414]/5'}`}>
+1797:              key={`${sig.id}-${i}`}
+1915:                key="live"
+2063:                            <div key={`loader-main-${i}`} className="h-20 bg-[#141414]/5 animate-pulse border border-[#141414]/10" />
+2069:                            key={`live-res-${result.id || idx}-${idx}`} 
+2122:                                {aiInsights.patterns.map((p: any, i: number) => <li key={`pattern-${p.value}-${i}`}>{p.value} ({p.count})</li>)}
+2128:                                {aiInsights.sequences.map((s: any, i: number) => <li key={`sequence-${s.value}-${i}`}>{s.value} ({s.count})</li>)}
+2134:                                {aiInsights.biases.map((b: any, i: number) => <li key={`bias-${b.value}-${i}`}>{b.value} ({b.count})</li>)}
+2181:                key="analytics"
+2239:                         <div key={`${f.id}-${i}`} className="border border-white/10 p-4 hover:bg-white hover:text-[#141414] transition-all group relative">
+2352:                                            key={`weekly-cell-${index}`} 
+2400:                                      key={`daily-cell-${index}`} 
+2519:                key="bumpers"
+2535:                key="schedule"
+2556:                        key={`cad-schedule-${s.day}-${i}`} 
+2606:                key="signals"
+2628:                key="rectify"
+2640:                key="history"
+2675:                              <div key={`skeleton-hist-${i}`} className="h-20 bg-[#141414]/5 animate-pulse border border-[#141414]/10" />
+2681:                              key={`${res.id}-${i}`} 
+2711:                            <div key={`digest-schedule-${s.day}-${i}`} className="flex justify-between items-center py-2 border-b border-[#141414]/10 last:border-b-0 text-sm">
+2725:                            <div key={`struct-prize-${p.tier}-${i}`} className="flex justify-between items-end border-b border-[#141414]/5 pb-2">
+2745:                key="requirements"
+2768:                key="forecast"
+2779:                key="readme"
